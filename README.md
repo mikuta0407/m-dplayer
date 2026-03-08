@@ -1,8 +1,7 @@
-# mtalker
+# m-dplayer
 
 Discord 向けの URL ベース音楽再生 Bot です。`/dplay` で直接音声ファイルリンクまたは `yt-dlp` 対応 URL を再生し、ギルド単位でキュー管理します。
 
-> 現在の README は音楽 Bot の現行実装に合わせて更新しています。
 
 ## 主な機能
 

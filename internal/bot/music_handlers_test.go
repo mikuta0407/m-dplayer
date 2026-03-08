@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/mikuta0407/mtalker/internal/session"
+	"github.com/mikuta0407/m-dplayer/internal/session"
 )
 
 func TestQueueSnapshotMessageIncludesCurrentAndQueuedTracks(t *testing.T) {

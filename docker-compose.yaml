@@ -1,11 +1,11 @@
 services:
-  mtalker:
+  m-dplayer:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         LIBDAVE_VERSION: v1.1.1
-    container_name: mtalker
+    container_name: m-dplayer
     restart: unless-stopped
     environment:
       # 必須: Discord Bot トークンを設定してください

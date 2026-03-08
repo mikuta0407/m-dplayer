@@ -40,6 +40,6 @@ RUN go mod download
 COPY main.go ./
 COPY internal ./internal
 
-RUN go build -trimpath -o /usr/local/bin/mtalker .
+RUN go build -trimpath -o /usr/local/bin/m-dplayer .
 
-CMD ["mtalker"]
+CMD ["m-dplayer"]

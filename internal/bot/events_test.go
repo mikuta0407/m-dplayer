@@ -13,7 +13,7 @@ import (
 	botgateway "github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/disgo/voice"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/mikuta0407/mtalker/internal/session"
+	"github.com/mikuta0407/m-dplayer/internal/session"
 )
 
 func TestPrimeVoiceConnectionSendsSilenceFrame(t *testing.T) {

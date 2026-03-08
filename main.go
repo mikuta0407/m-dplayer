@@ -14,8 +14,8 @@ import (
 	"github.com/disgoorg/disgo/bot"
 	"github.com/disgoorg/disgo/gateway"
 	"github.com/disgoorg/disgo/voice"
-	appbot "github.com/mikuta0407/mtalker/internal/bot"
-	appconfig "github.com/mikuta0407/mtalker/internal/config"
+	appbot "github.com/mikuta0407/m-dplayer/internal/bot"
+	appconfig "github.com/mikuta0407/m-dplayer/internal/config"
 )
 
 const shutdownTimeout = 5 * time.Second

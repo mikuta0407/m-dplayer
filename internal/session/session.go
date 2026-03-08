@@ -10,7 +10,7 @@ import (
 
 	"github.com/disgoorg/disgo/voice"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/mikuta0407/mtalker/internal/music"
+	"github.com/mikuta0407/m-dplayer/internal/music"
 )
 
 const (

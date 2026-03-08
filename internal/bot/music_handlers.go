@@ -12,10 +12,10 @@ import (
 	"github.com/disgoorg/disgo/discord"
 	"github.com/disgoorg/disgo/events"
 	"github.com/disgoorg/snowflake/v2"
-	"github.com/mikuta0407/mtalker/internal/audio"
-	appconfig "github.com/mikuta0407/mtalker/internal/config"
-	"github.com/mikuta0407/mtalker/internal/music"
-	"github.com/mikuta0407/mtalker/internal/session"
+	"github.com/mikuta0407/m-dplayer/internal/audio"
+	appconfig "github.com/mikuta0407/m-dplayer/internal/config"
+	"github.com/mikuta0407/m-dplayer/internal/music"
+	"github.com/mikuta0407/m-dplayer/internal/session"
 )
 
 const commandResolveTimeout = 90 * time.Second

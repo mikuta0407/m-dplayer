@@ -1,4 +1,4 @@
-module github.com/mikuta0407/mtalker
+module github.com/mikuta0407/m-dplayer
 
 go 1.26.0
 
