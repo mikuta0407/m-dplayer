@@ -10,19 +10,62 @@ import (
 )
 
 const (
-	ttsJoinCommandName       = "ttsjoin"
-	ttsDisconnectCommandName = "ttsdisconnect"
+	dplayCommandName            = "dplay"
+	dplayCommandURLOptionName   = "url"
+	dstopCommandName            = "dstop"
+	dtermCommandName            = "dterm"
+	dnextCommandName            = "dnext"
+	dqueueCommandName           = "dqueue"
+	dvolCommandName             = "dvol"
+	dvolCommandVolumeOptionName = "volume"
+	minVolumeOptionValue        = 0
+	maxVolumeOptionValue        = 10
 )
 
 func Commands() []discord.ApplicationCommandCreate {
+	minVolume := minVolumeOptionValue
+	maxVolume := maxVolumeOptionValue
+
 	return []discord.ApplicationCommandCreate{
 		discord.SlashCommandCreate{
-			Name:        ttsJoinCommandName,
-			Description: "コマンド実行者が参加しているボイスチャンネルへ接続します",
+			Name:        dplayCommandName,
+			Description: "URL を再生するか、既存セッションのキューへ追加します",
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionString{
+					Name:        dplayCommandURLOptionName,
+					Description: "再生またはキュー追加する URL",
+					Required:    true,
+				},
+			},
 		},
 		discord.SlashCommandCreate{
-			Name:        ttsDisconnectCommandName,
-			Description: "現在の読み上げ用ボイス接続を切断します",
+			Name:        dstopCommandName,
+			Description: "現在再生中の曲を停止して次の曲へ進めます",
+		},
+		discord.SlashCommandCreate{
+			Name:        dtermCommandName,
+			Description: "再生を停止し、キューを破棄してボイス接続を切断します",
+		},
+		discord.SlashCommandCreate{
+			Name:        dnextCommandName,
+			Description: "現在再生中の曲をスキップして次の曲へ進めます",
+		},
+		discord.SlashCommandCreate{
+			Name:        dqueueCommandName,
+			Description: "現在再生中の曲と待機キューを表示します",
+		},
+		discord.SlashCommandCreate{
+			Name:        dvolCommandName,
+			Description: "再生音量を 0 から 10 で設定します",
+			Options: []discord.ApplicationCommandOption{
+				discord.ApplicationCommandOptionInt{
+					Name:        dvolCommandVolumeOptionName,
+					Description: "音量 (0-10, 10 が等倍)",
+					Required:    true,
+					MinValue:    &minVolume,
+					MaxValue:    &maxVolume,
+				},
+			},
 		},
 	}
 }

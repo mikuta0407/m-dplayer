@@ -73,13 +73,15 @@ func (h *Handler) OnApplicationCommandInteractionCreate(event *events.Applicatio
 	data := event.SlashCommandInteractionData()
 
 	switch data.CommandName() {
-	case ttsJoinCommandName:
-		h.handleTTSJoin(event)
-	case ttsDisconnectCommandName:
-		h.handleTTSDisconnect(event)
+	case dplayCommandName, dstopCommandName, dtermCommandName, dnextCommandName, dqueueCommandName, dvolCommandName:
+		h.handleMusicCommandPlaceholder(event, data.CommandName())
 	default:
 		slog.Warn("received unsupported application command", slog.String("command_name", data.CommandName()))
 	}
+}
+
+func (h *Handler) handleMusicCommandPlaceholder(event *events.ApplicationCommandInteractionCreate, commandName string) {
+	h.respondEphemeral(event, fmt.Sprintf("/%s は現在移行実装中です。今回の変更ではコマンド定義のみを新仕様へ置き換えました。", commandName))
 }
 
 func (h *Handler) OnVoiceServerUpdate(event *events.VoiceServerUpdate) {
