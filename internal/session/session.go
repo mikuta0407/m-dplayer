@@ -95,6 +95,9 @@ func New(params CreateParams) *Session {
 	}
 
 	volume := params.Volume
+	if volume == 0 {
+		volume = DefaultVolume
+	}
 	if volume < MinVolume || volume > MaxVolume {
 		volume = DefaultVolume
 	}
