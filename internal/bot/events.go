@@ -181,8 +181,11 @@ func (h *Handler) OnMessageCreate(event *events.MessageCreate) {
 	sess.TrackTempFile(textFilePath)
 
 	request := session.PlaybackRequest{
-		Content:      normalized,
-		TextFilePath: textFilePath,
+		Title:         normalized,
+		Content:       normalized,
+		SourceType:    session.QueueSourceTypeTTS,
+		TextChannelID: event.ChannelID,
+		TempFilePath:  textFilePath,
 	}
 	if err := sess.Enqueue(request); err != nil {
 		_ = sess.RemoveTempFile(textFilePath)
@@ -570,26 +573,50 @@ func (h *Handler) runPlaybackWorker(sess *session.Session) {
 	}
 
 	for {
-		select {
-		case <-sess.Context().Done():
+		if sess.Context().Err() != nil {
 			return
-		case request := <-sess.Queue():
-			if sess.Context().Err() != nil {
+		}
+
+		request, err := sess.WaitDequeue()
+		if err != nil {
+			if errors.Is(err, session.ErrSessionClosed) || errors.Is(err, context.Canceled) {
 				return
 			}
-			h.processPlaybackRequest(sess, request)
+			slog.Warn("failed to dequeue playback request",
+				slog.Any("err", err),
+				slog.Uint64("guild_id", uint64(sess.GuildID())),
+			)
+			continue
 		}
+
+		h.processPlaybackRequest(sess, request)
 	}
 }
 
 func (h *Handler) processPlaybackRequest(sess *session.Session, request session.PlaybackRequest) {
-	result, err := h.synthesizer.Synthesize(request.TextFilePath, time.Now())
-	if removeErr := sess.RemoveTempFile(request.TextFilePath); removeErr != nil {
+	playbackCtx, playbackCancel := context.WithCancel(sess.Context())
+	if err := sess.StartCurrent(request, playbackCancel); err != nil {
+		if !errors.Is(err, session.ErrSessionClosed) {
+			slog.Warn("failed to mark current playback request",
+				slog.Any("err", err),
+				slog.Uint64("guild_id", uint64(sess.GuildID())),
+			)
+		}
+		return
+	}
+	defer sess.FinishCurrent()
+
+	result, err := h.synthesizer.Synthesize(request.TempFilePath, time.Now())
+	if removeErr := sess.RemoveTempFile(request.TempFilePath); removeErr != nil {
 		slog.Warn("failed to remove synthesized text file",
 			slog.Any("err", removeErr),
 			slog.Uint64("guild_id", uint64(sess.GuildID())),
-			slog.String("text_file_path", request.TextFilePath),
+			slog.String("text_file_path", request.TempFilePath),
 		)
+	}
+
+	if playbackCtx.Err() != nil {
+		return
 	}
 
 	if err != nil {
@@ -601,7 +628,7 @@ func (h *Handler) processPlaybackRequest(sess *session.Session, request session.
 			slog.Uint64("guild_id", uint64(sess.GuildID())),
 			slog.Uint64("text_channel_id", uint64(sess.TextChannelID())),
 			slog.Uint64("voice_channel_id", uint64(sess.VoiceChannelID())),
-			slog.String("text_file_path", request.TextFilePath),
+			slog.String("text_file_path", request.TempFilePath),
 		)
 		return
 	}
@@ -627,7 +654,7 @@ func (h *Handler) processPlaybackRequest(sess *session.Session, request session.
 	)
 
 	stream := mustNewWAVStreamFromSource(audioSource)
-	if err := sendPlaybackStream(sess, stream); err != nil {
+	if err := sendPlaybackStream(playbackCtx, sess, stream); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return
 		}
@@ -647,7 +674,7 @@ func (h *Handler) processPlaybackRequest(sess *session.Session, request session.
 	)
 }
 
-func sendPlaybackStream(sess *session.Session, stream audio.OpusFrameStream) (err error) {
+func sendPlaybackStream(ctx context.Context, sess *session.Session, stream audio.OpusFrameStream) (err error) {
 	used := false
 	defer func() {
 		if !used && stream != nil {
@@ -659,7 +686,7 @@ func sendPlaybackStream(sess *session.Session, stream audio.OpusFrameStream) (er
 		sess.SetIdleSpeakingActive(false)
 		defer sess.SetIdleSpeakingActive(false)
 		used = true
-		return audio.SendOpusFrameStream(sess.Context(), conn, stream)
+		return audio.SendOpusFrameStream(ctx, conn, stream)
 	})
 }
 
@@ -861,7 +888,7 @@ func logSynthesisError(sess *session.Session, request session.PlaybackRequest, e
 		slog.Uint64("guild_id", uint64(sess.GuildID())),
 		slog.Uint64("text_channel_id", uint64(sess.TextChannelID())),
 		slog.Uint64("voice_channel_id", uint64(sess.VoiceChannelID())),
-		slog.String("text_file_path", request.TextFilePath),
+		slog.String("text_file_path", request.TempFilePath),
 	}
 
 	var synthesisErr *tts.SynthesisError
