@@ -4,17 +4,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
-
-	"github.com/disgoorg/snowflake/v2"
 )
 
 type Config struct {
-	Token          string
-	FFmpegPath     string
-	YTDLPPath      string
-	CommandGuildID *snowflake.ID
+	Token      string
+	FFmpegPath string
+	YTDLPPath  string
 }
 
 func Load() (Config, error) {
@@ -37,12 +33,6 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	cfg.YTDLPPath = ytdlpPath
-
-	commandGuildID, err := loadOptionalSnowflakeEnv("DISCORD_COMMAND_GUILD_ID")
-	if err != nil {
-		return Config{}, err
-	}
-	cfg.CommandGuildID = commandGuildID
 
 	return cfg, nil
 }
@@ -73,25 +63,4 @@ func resolveCommandPath(envKey string, defaultCommand string) (string, error) {
 		return "", fmt.Errorf("%s command was not found in PATH: %w", defaultCommand, err)
 	}
 	return resolvedPath, nil
-}
-
-func loadOptionalSnowflakeEnv(key string) (*snowflake.ID, error) {
-	rawValue := strings.TrimSpace(os.Getenv(key))
-	if rawValue == "" {
-		return nil, nil
-	}
-
-	id, err := parseSnowflakeEnv(key, rawValue)
-	if err != nil {
-		return nil, err
-	}
-	return &id, nil
-}
-
-func parseSnowflakeEnv(key string, value string) (snowflake.ID, error) {
-	id, err := strconv.ParseUint(value, 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s must be an unsigned integer: %w", key, err)
-	}
-	return snowflake.ID(id), nil
 }

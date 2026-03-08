@@ -14,7 +14,6 @@ func TestLoadRequiresOnlyDiscordTokenAndResolvesCommands(t *testing.T) {
 
 	t.Setenv("PATH", binDir)
 	t.Setenv("DISCORD_TOKEN", "test-token")
-	t.Setenv("DISCORD_COMMAND_GUILD_ID", "123456789")
 
 	cfg, err := Load()
 	if err != nil {
@@ -28,9 +27,6 @@ func TestLoadRequiresOnlyDiscordTokenAndResolvesCommands(t *testing.T) {
 	}
 	if cfg.YTDLPPath != ytdlpPath {
 		t.Fatalf("YTDLPPath = %q, want %q", cfg.YTDLPPath, ytdlpPath)
-	}
-	if cfg.CommandGuildID == nil || *cfg.CommandGuildID != 123456789 {
-		t.Fatalf("CommandGuildID = %v, want %d", cfg.CommandGuildID, 123456789)
 	}
 }
 

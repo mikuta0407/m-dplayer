@@ -35,14 +35,7 @@ func main() {
 	startupAttrs := []any{
 		slog.String("ffmpeg_path", cfg.FFmpegPath),
 		slog.String("yt_dlp_path", cfg.YTDLPPath),
-	}
-	if cfg.CommandGuildID != nil {
-		startupAttrs = append(startupAttrs,
-			slog.String("command_scope", "guild"),
-			slog.Uint64("command_guild_id", uint64(*cfg.CommandGuildID)),
-		)
-	} else {
-		startupAttrs = append(startupAttrs, slog.String("command_scope", "global"))
+		slog.String("command_scope", "global"),
 	}
 	slog.Info("startup validation passed", startupAttrs...)
 
@@ -75,7 +68,7 @@ func main() {
 		client = nil
 	}
 
-	if err := appbot.RegisterCommands(client, cfg.CommandGuildID); err != nil {
+	if err := appbot.RegisterCommands(client); err != nil {
 		slog.Error("error registering slash commands", slog.Any("err", err))
 		shutdown(context.Background())
 		return

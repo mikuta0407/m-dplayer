@@ -2,7 +2,7 @@
 
 Discord 向けの URL ベース音楽再生 Bot です。`/dplay` で直接音声ファイルリンクまたは `yt-dlp` 対応 URL を再生し、ギルド単位でキュー管理します。
 
-> 現在のローカル実行手順は新しい音楽 Bot 仕様に追従しています。Docker / compose まわりは次の更新段階で整理予定です。
+> 現在の README は音楽 Bot の現行実装に合わせて更新しています。
 
 ## 主な機能
 
@@ -117,7 +117,6 @@ export PKG_CONFIG_PATH="$HOME/.local/lib/pkgconfig:$PKG_CONFIG_PATH"
 | 変数名 | 必須 | 説明 |
 | --- | --- | --- |
 | `DISCORD_TOKEN` | 必須 | Discord Bot トークン |
-| `DISCORD_COMMAND_GUILD_ID` | 任意 | コマンドを特定ギルドへだけ登録したい場合のギルド ID |
 | `FFMPEG_PATH` | 任意 | `ffmpeg` の実行パス。未指定時は `PATH` から探索します |
 | `YT_DLP_PATH` | 任意 | `yt-dlp` の実行パス。未指定時は `PATH` から探索します |
 
@@ -157,7 +156,7 @@ go build ./...
 
 ## Docker / compose
 
-現在の `Dockerfile` と `docker-compose.yaml` は旧 TTS 構成のままです。コンテナ実行手順は次の更新段階で音楽 Bot 用へ整理します。
+コンテナでは `ffmpeg` と `yt-dlp` を利用します。
 
 ## 注意点
 
@@ -169,5 +168,5 @@ go build ./...
 
 このリポジトリ内のソースコードは [MIT License](LICENSE) です。
 
-ただし、Docker ビルド時に取得する `tohoku-f01-neutral.htsvoice` などの外部コンポーネントには、それぞれ個別のライセンスが適用されます。利用時は配布元の条件も確認してください。
+ただし、実行時や Docker ビルド時に利用する `ffmpeg`、`yt-dlp`、`libdave` などの外部コンポーネントには、それぞれ個別のライセンスが適用されます。利用時は配布元の条件も確認してください。
 
