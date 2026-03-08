@@ -44,11 +44,7 @@ type Handler struct {
 
 func NewHandler(cfg appconfig.Config) *Handler {
 	return &Handler{
-		synthesizer: tts.NewOpenJTalkSynthesizer(tts.OpenJTalkConfig{
-			CommandPath:    cfg.OpenJTalkPath,
-			DictionaryPath: cfg.DICPath,
-			VoicePath:      cfg.VoicePath,
-		}),
+		synthesizer:                  nil,
 		resolver:                     newMusicResolver(cfg),
 		ffmpegConfig:                 newFFmpegConfig(cfg),
 		sessions:                     session.NewManager(),

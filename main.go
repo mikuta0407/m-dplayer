@@ -33,9 +33,8 @@ func main() {
 	}
 
 	startupAttrs := []any{
-		slog.String("open_jtalk_path", cfg.OpenJTalkPath),
-		slog.String("dic_path", cfg.DICPath),
-		slog.String("voice_path", cfg.VoicePath),
+		slog.String("ffmpeg_path", cfg.FFmpegPath),
+		slog.String("yt_dlp_path", cfg.YTDLPPath),
 	}
 	if cfg.CommandGuildID != nil {
 		startupAttrs = append(startupAttrs,

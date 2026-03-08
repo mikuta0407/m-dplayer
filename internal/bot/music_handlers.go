@@ -21,11 +21,11 @@ import (
 const commandResolveTimeout = 90 * time.Second
 
 func newMusicResolver(cfg appconfig.Config) *music.Resolver {
-	return music.NewResolver(music.ResolverConfig{})
+	return music.NewResolver(music.ResolverConfig{YTDLPPath: cfg.YTDLPPath})
 }
 
 func newFFmpegConfig(cfg appconfig.Config) audio.FFmpegConfig {
-	return audio.FFmpegConfig{}
+	return audio.FFmpegConfig{CommandPath: cfg.FFmpegPath}
 }
 
 func (h *Handler) handleDPlay(event *events.ApplicationCommandInteractionCreate) {
