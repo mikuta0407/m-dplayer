@@ -17,6 +17,7 @@ import (
 	"github.com/disgoorg/snowflake/v2"
 	"github.com/mikuta0407/mtalker/internal/audio"
 	appconfig "github.com/mikuta0407/mtalker/internal/config"
+	"github.com/mikuta0407/mtalker/internal/music"
 	"github.com/mikuta0407/mtalker/internal/session"
 	"github.com/mikuta0407/mtalker/internal/tts"
 )
@@ -31,8 +32,10 @@ type voiceGatewayRecovery struct {
 }
 
 type Handler struct {
-	synthesizer tts.Synthesizer
-	sessions    *session.Manager
+	synthesizer  tts.Synthesizer
+	resolver     *music.Resolver
+	ffmpegConfig audio.FFmpegConfig
+	sessions     *session.Manager
 
 	voiceGatewayCloseMu          sync.Mutex
 	voiceGatewayRecoveries       map[snowflake.ID]*voiceGatewayRecovery
@@ -46,6 +49,8 @@ func NewHandler(cfg appconfig.Config) *Handler {
 			DictionaryPath: cfg.DICPath,
 			VoicePath:      cfg.VoicePath,
 		}),
+		resolver:                     newMusicResolver(cfg),
+		ffmpegConfig:                 newFFmpegConfig(cfg),
 		sessions:                     session.NewManager(),
 		voiceGatewayRecoveries:       make(map[snowflake.ID]*voiceGatewayRecovery),
 		voiceServerUpdateGracePeriod: defaultVoiceServerUpdateGracePeriod,
@@ -73,8 +78,18 @@ func (h *Handler) OnApplicationCommandInteractionCreate(event *events.Applicatio
 	data := event.SlashCommandInteractionData()
 
 	switch data.CommandName() {
-	case dplayCommandName, dstopCommandName, dtermCommandName, dnextCommandName, dqueueCommandName, dvolCommandName:
-		h.handleMusicCommandPlaceholder(event, data.CommandName())
+	case dplayCommandName:
+		h.handleDPlay(event)
+	case dstopCommandName:
+		h.handleDStopLike(event, dstopCommandName)
+	case dnextCommandName:
+		h.handleDStopLike(event, dnextCommandName)
+	case dtermCommandName:
+		h.handleDTerm(event)
+	case dqueueCommandName:
+		h.handleDQueue(event)
+	case dvolCommandName:
+		h.handleDVol(event)
 	default:
 		slog.Warn("received unsupported application command", slog.String("command_name", data.CommandName()))
 	}
@@ -142,71 +157,7 @@ func (h *Handler) OnGuildVoiceStateUpdate(event *events.GuildVoiceStateUpdate) {
 	}
 }
 
-func (h *Handler) OnMessageCreate(event *events.MessageCreate) {
-	if h.sessions == nil || event.GuildID == nil {
-		return
-	}
-
-	sess, ok := h.sessions.Get(*event.GuildID)
-	if !ok {
-		return
-	}
-	if sess.TextChannelID() != event.ChannelID {
-		return
-	}
-	if shouldSkipMessage(event, event.Client().ID()) {
-		return
-	}
-
-	normalized := tts.NormalizeText(event.Message.Content)
-	if normalized == "" {
-		return
-	}
-
-	channelName := tts.DefaultChannelName
-	if channel, ok := event.Channel(); ok {
-		channelName = channel.Name()
-	}
-
-	textFilePath, err := tts.CreateTextFile(channelName, normalized, time.Now())
-	if err != nil {
-		slog.Error("failed to create text file for tts request",
-			slog.Any("err", err),
-			slog.Uint64("guild_id", uint64(sess.GuildID())),
-			slog.Uint64("channel_id", uint64(event.ChannelID)),
-			slog.Uint64("message_id", uint64(event.MessageID)),
-		)
-		return
-	}
-	sess.TrackTempFile(textFilePath)
-
-	request := session.PlaybackRequest{
-		Title:         normalized,
-		Content:       normalized,
-		SourceType:    session.QueueSourceTypeTTS,
-		TextChannelID: event.ChannelID,
-		TempFilePath:  textFilePath,
-	}
-	if err := sess.Enqueue(request); err != nil {
-		_ = sess.RemoveTempFile(textFilePath)
-		slog.Warn("failed to enqueue tts request",
-			slog.Any("err", err),
-			slog.Uint64("guild_id", uint64(sess.GuildID())),
-			slog.Uint64("channel_id", uint64(event.ChannelID)),
-			slog.Uint64("message_id", uint64(event.MessageID)),
-		)
-		return
-	}
-
-	slog.Info("queued tts request",
-		slog.Uint64("guild_id", uint64(sess.GuildID())),
-		slog.Uint64("channel_id", uint64(event.ChannelID)),
-		slog.Uint64("voice_channel_id", uint64(sess.VoiceChannelID())),
-		slog.Uint64("message_id", uint64(event.MessageID)),
-		slog.Int("queue_length", sess.QueueLen()),
-		slog.String("text_file_path", textFilePath),
-	)
-}
+func (h *Handler) OnMessageCreate(event *events.MessageCreate) {}
 
 func (h *Handler) handleTTSJoin(event *events.ApplicationCommandInteractionCreate) {
 	guildID := event.GuildID()
@@ -299,7 +250,7 @@ func (h *Handler) processTTSJoin(event *events.ApplicationCommandInteractionCrea
 	// This bot only sends audio.
 	// Reading inbound UDP packets here can surface transient DAVE decrypt errors
 	// from other participants and incorrectly tear down the whole session.
-	go h.runPlaybackWorker(sess)
+	go h.runLegacyTTSPlaybackWorker(sess)
 	go h.runIdleVoiceKeepAlive(sess)
 
 	if err := h.primeVoiceConnection(sess); err != nil {
@@ -566,7 +517,7 @@ func (h *Handler) cleanupFailedVoiceSession(client *disgobot.Client, guildID sno
 	}()
 }
 
-func (h *Handler) runPlaybackWorker(sess *session.Session) {
+func (h *Handler) runLegacyTTSPlaybackWorker(sess *session.Session) {
 	if h.synthesizer == nil {
 		slog.Warn("tts synthesizer is not configured", slog.Uint64("guild_id", uint64(sess.GuildID())))
 		return
@@ -589,11 +540,11 @@ func (h *Handler) runPlaybackWorker(sess *session.Session) {
 			continue
 		}
 
-		h.processPlaybackRequest(sess, request)
+		h.processLegacyTTSPlaybackRequest(sess, request)
 	}
 }
 
-func (h *Handler) processPlaybackRequest(sess *session.Session, request session.PlaybackRequest) {
+func (h *Handler) processLegacyTTSPlaybackRequest(sess *session.Session, request session.PlaybackRequest) {
 	playbackCtx, playbackCancel := context.WithCancel(sess.Context())
 	if err := sess.StartCurrent(request, playbackCancel); err != nil {
 		if !errors.Is(err, session.ErrSessionClosed) {

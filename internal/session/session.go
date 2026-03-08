@@ -10,6 +10,7 @@ import (
 
 	"github.com/disgoorg/disgo/voice"
 	"github.com/disgoorg/snowflake/v2"
+	"github.com/mikuta0407/mtalker/internal/music"
 )
 
 const (
@@ -46,6 +47,7 @@ type QueueItem struct {
 	RequestedBy   RequestUser
 	TextChannelID snowflake.ID
 	TempFilePath  string
+	Source        music.InputSource
 
 	// Content is kept temporarily so the existing TTS pipeline can continue to
 	// log normalized text while the migration to music playback is in progress.

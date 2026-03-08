@@ -53,14 +53,11 @@ func main() {
 		bot.WithGatewayConfigOpts(gateway.WithIntents(
 			gateway.IntentGuilds,
 			gateway.IntentGuildVoiceStates,
-			gateway.IntentGuildMessages,
-			gateway.IntentMessageContent,
 		)),
 		bot.WithEventListenerFunc(handler.OnReady),
 		bot.WithEventListenerFunc(handler.OnApplicationCommandInteractionCreate),
 		bot.WithEventListenerFunc(handler.OnVoiceServerUpdate),
 		bot.WithEventListenerFunc(handler.OnGuildVoiceStateUpdate),
-		bot.WithEventListenerFunc(handler.OnMessageCreate),
 		bot.WithVoiceManagerConfigOpts(
 			voice.WithDaveSessionCreateFunc(golibdave.NewSession),
 			voice.WithConnCreateFunc(appbot.NewVoiceConnCreateFunc(handler)),
