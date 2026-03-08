@@ -15,8 +15,6 @@ func TestLoadRequiresOnlyDiscordTokenAndResolvesCommands(t *testing.T) {
 	t.Setenv("PATH", binDir)
 	t.Setenv("DISCORD_TOKEN", "test-token")
 	t.Setenv("DISCORD_COMMAND_GUILD_ID", "123456789")
-	t.Setenv("DICPATH", "")
-	t.Setenv("VOICEPATH", "")
 
 	cfg, err := Load()
 	if err != nil {

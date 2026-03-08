@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"runtime/debug"
 	"sync"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 	appconfig "github.com/mikuta0407/mtalker/internal/config"
 	"github.com/mikuta0407/mtalker/internal/music"
 	"github.com/mikuta0407/mtalker/internal/session"
-	"github.com/mikuta0407/mtalker/internal/tts"
 )
 
 const voiceConnectTimeout = 30 * time.Second
@@ -32,7 +30,6 @@ type voiceGatewayRecovery struct {
 }
 
 type Handler struct {
-	synthesizer  tts.Synthesizer
 	resolver     *music.Resolver
 	ffmpegConfig audio.FFmpegConfig
 	sessions     *session.Manager
@@ -44,7 +41,6 @@ type Handler struct {
 
 func NewHandler(cfg appconfig.Config) *Handler {
 	return &Handler{
-		synthesizer:                  nil,
 		resolver:                     newMusicResolver(cfg),
 		ffmpegConfig:                 newFFmpegConfig(cfg),
 		sessions:                     session.NewManager(),
@@ -89,10 +85,6 @@ func (h *Handler) OnApplicationCommandInteractionCreate(event *events.Applicatio
 	default:
 		slog.Warn("received unsupported application command", slog.String("command_name", data.CommandName()))
 	}
-}
-
-func (h *Handler) handleMusicCommandPlaceholder(event *events.ApplicationCommandInteractionCreate, commandName string) {
-	h.respondEphemeral(event, fmt.Sprintf("/%s は現在移行実装中です。今回の変更ではコマンド定義のみを新仕様へ置き換えました。", commandName))
 }
 
 func (h *Handler) OnVoiceServerUpdate(event *events.VoiceServerUpdate) {
@@ -151,115 +143,6 @@ func (h *Handler) OnGuildVoiceStateUpdate(event *events.GuildVoiceStateUpdate) {
 			slog.Uint64("guild_id", uint64(guildID)),
 		)
 	}
-}
-
-func (h *Handler) OnMessageCreate(event *events.MessageCreate) {}
-
-func (h *Handler) handleTTSJoin(event *events.ApplicationCommandInteractionCreate) {
-	guildID := event.GuildID()
-	if guildID == nil {
-		h.respondEphemeral(event, "このコマンドはサーバー内でのみ使用できます。")
-		return
-	}
-	if h.sessions != nil && h.sessions.Exists(*guildID) {
-		slog.Info("rejected duplicate ttsjoin command",
-			slog.Uint64("guild_id", uint64(*guildID)),
-			slog.Uint64("actor_user_id", uint64(event.User().ID)),
-		)
-		h.respondEphemeral(event, "このサーバーでは既に読み上げセッションが起動しています。`/ttsdisconnect` を実行してから再度お試しください。")
-		return
-	}
-	if err := event.CreateMessage(discord.NewMessageCreate().WithContent("ボイスチャンネルへ接続しています。しばらくお待ちください。").WithEphemeral(true)); err != nil {
-		slog.Error("failed to create initial ttsjoin interaction response",
-			slog.Any("err", err),
-			slog.Uint64("guild_id", uint64(*guildID)),
-			slog.Uint64("actor_user_id", uint64(event.User().ID)),
-		)
-		return
-	}
-
-	go h.processTTSJoin(event, *guildID, event.Channel().ID(), event.User().ID)
-}
-
-func (h *Handler) processTTSJoin(event *events.ApplicationCommandInteractionCreate, guildID snowflake.ID, textChannelID snowflake.ID, actorUserID snowflake.ID) {
-	finalized := false
-	finishDeferred := func(content string) {
-		finalized = true
-		_ = h.updateDeferredResponse(event, content)
-	}
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			slog.Error("panic while handling ttsjoin command",
-				slog.Any("panic", recovered),
-				slog.Uint64("guild_id", uint64(guildID)),
-				slog.Uint64("actor_user_id", uint64(actorUserID)),
-				slog.String("stack", string(debug.Stack())),
-			)
-			if !finalized {
-				finishDeferred("読み上げセッションの開始中に内部エラーが発生しました。少し待ってから再度お試しください。")
-			}
-		}
-	}()
-
-	slog.Info("received ttsjoin command",
-		slog.Uint64("guild_id", uint64(guildID)),
-		slog.Uint64("channel_id", uint64(textChannelID)),
-		slog.Uint64("actor_user_id", uint64(actorUserID)),
-	)
-
-	voiceState, err := h.resolveUserVoiceState(event.Client(), guildID, actorUserID)
-	if err != nil {
-		slog.Error("failed to resolve command user voice state",
-			slog.Any("err", err),
-			slog.Uint64("guild_id", uint64(guildID)),
-			slog.Uint64("actor_user_id", uint64(actorUserID)),
-		)
-		finishDeferred("コマンド実行者の Voice State を取得できませんでした。少し待ってから再度お試しください。")
-		return
-	}
-	if voiceState == nil || voiceState.ChannelID == nil {
-		slog.Info("command user is not connected to a voice channel",
-			slog.Uint64("guild_id", uint64(guildID)),
-			slog.Uint64("actor_user_id", uint64(actorUserID)),
-		)
-		finishDeferred("ボイスチャンネルに参加してから `/ttsjoin` を実行してください。")
-		return
-	}
-
-	voiceChannelID := *voiceState.ChannelID
-	sess, err := h.openVoiceSession(event.Client(), guildID, textChannelID, voiceChannelID)
-	if err != nil {
-		if errors.Is(err, session.ErrSessionAlreadyExists) {
-			finishDeferred("このサーバーでは既に読み上げセッションが起動しています。`/ttsdisconnect` を実行してから再度お試しください。")
-			return
-		}
-
-		slog.Error("failed to open tts voice session",
-			slog.Any("err", err),
-			slog.Uint64("guild_id", uint64(guildID)),
-			slog.Uint64("voice_channel_id", uint64(voiceChannelID)),
-		)
-		finishDeferred("ボイスチャンネルへの接続に失敗しました。Bot に接続権限があるか確認して、再度お試しください。")
-		return
-	}
-
-	// This bot only sends audio.
-	// Reading inbound UDP packets here can surface transient DAVE decrypt errors
-	// from other participants and incorrectly tear down the whole session.
-	go h.runLegacyTTSPlaybackWorker(sess)
-	go h.runIdleVoiceKeepAlive(sess)
-
-	if err := h.primeVoiceConnection(sess); err != nil {
-		slog.Warn("failed to prime voice connection",
-			slog.Any("err", err),
-			slog.Uint64("guild_id", uint64(guildID)),
-			slog.Uint64("voice_channel_id", uint64(voiceChannelID)),
-		)
-	}
-
-	finishDeferred(
-		fmt.Sprintf("ボイスチャンネル %s に接続しました。読み上げ対象テキストチャンネルは %s です。投稿の監視、キュー登録、音声再生を開始しました。", formatChannelMention(voiceChannelID), formatChannelMention(textChannelID)),
-	)
 }
 
 func (h *Handler) runIdleVoiceKeepAlive(sess *session.Session) {
@@ -326,90 +209,6 @@ func (h *Handler) primeVoiceConnection(sess *session.Session) error {
 	return sess.WithConnExclusive(func(conn voice.Conn) error {
 		return h.sendIdleSilenceFrame(sess, conn)
 	})
-}
-
-func (h *Handler) handleTTSDisconnect(event *events.ApplicationCommandInteractionCreate) {
-	guildID := event.GuildID()
-	if guildID == nil {
-		h.respondEphemeral(event, "このコマンドはサーバー内でのみ使用できます。")
-		return
-	}
-	if h.sessions == nil || !h.sessions.Exists(*guildID) {
-		h.respondEphemeral(event, "現在、このサーバーで接続中の読み上げセッションはありません。")
-		return
-	}
-	channelID := event.Channel().ID()
-	actorUserID := event.User().ID
-
-	if err := event.CreateMessage(discord.NewMessageCreate().WithContent("読み上げセッションを切断しています。しばらくお待ちください。").WithEphemeral(true)); err != nil {
-		slog.Error("failed to create initial ttsdisconnect interaction response",
-			slog.Any("err", err),
-			slog.Uint64("guild_id", uint64(*guildID)),
-			slog.Uint64("actor_user_id", uint64(actorUserID)),
-		)
-		return
-	}
-
-	go h.processTTSDisconnect(*guildID, channelID, actorUserID, func(content string) {
-		_ = h.updateDeferredResponse(event, content)
-	})
-}
-
-func (h *Handler) processTTSDisconnect(guildID snowflake.ID, channelID snowflake.ID, actorUserID snowflake.ID, finishResponse func(string)) {
-	finalized := false
-	finish := func(content string) {
-		finalized = true
-		if finishResponse != nil {
-			finishResponse(content)
-		}
-	}
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			slog.Error("panic while handling ttsdisconnect command",
-				slog.Any("panic", recovered),
-				slog.Uint64("guild_id", uint64(guildID)),
-				slog.Uint64("actor_user_id", uint64(actorUserID)),
-				slog.String("stack", string(debug.Stack())),
-			)
-			if !finalized {
-				finish("読み上げセッションの切断中に内部エラーが発生しました。少し待ってから再度お試しください。")
-			}
-		}
-	}()
-
-	slog.Info("received ttsdisconnect command",
-		slog.Uint64("guild_id", uint64(guildID)),
-		slog.Uint64("channel_id", uint64(channelID)),
-		slog.Uint64("actor_user_id", uint64(actorUserID)),
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), voiceConnectTimeout)
-	defer cancel()
-
-	if h.sessions == nil {
-		finish("現在、このサーバーで接続中の読み上げセッションはありません。")
-		return
-	}
-
-	if err := h.sessions.Destroy(ctx, guildID); err != nil {
-		if errors.Is(err, session.ErrSessionNotFound) {
-			slog.Info("ttsdisconnect completed after session was already closed",
-				slog.Uint64("guild_id", uint64(guildID)),
-				slog.Uint64("actor_user_id", uint64(actorUserID)),
-			)
-			finish("読み上げセッションは既に切断されています。")
-			return
-		}
-
-		slog.Error("failed to destroy voice session",
-			slog.Any("err", err),
-			slog.Uint64("guild_id", uint64(guildID)),
-		)
-		finish("読み上げセッションの切断に失敗しました。少し待ってから再度お試しください。")
-		return
-	}
-
-	finish("読み上げセッションを切断しました。")
 }
 
 func (h *Handler) respondEphemeral(event *events.ApplicationCommandInteractionCreate, content string) {
@@ -511,114 +310,6 @@ func (h *Handler) cleanupFailedVoiceSession(client *disgobot.Client, guildID sno
 		defer cancel()
 		sess.Close(closeCtx)
 	}()
-}
-
-func (h *Handler) runLegacyTTSPlaybackWorker(sess *session.Session) {
-	if h.synthesizer == nil {
-		slog.Warn("tts synthesizer is not configured", slog.Uint64("guild_id", uint64(sess.GuildID())))
-		return
-	}
-
-	for {
-		if sess.Context().Err() != nil {
-			return
-		}
-
-		request, err := sess.WaitDequeue()
-		if err != nil {
-			if errors.Is(err, session.ErrSessionClosed) || errors.Is(err, context.Canceled) {
-				return
-			}
-			slog.Warn("failed to dequeue playback request",
-				slog.Any("err", err),
-				slog.Uint64("guild_id", uint64(sess.GuildID())),
-			)
-			continue
-		}
-
-		h.processLegacyTTSPlaybackRequest(sess, request)
-	}
-}
-
-func (h *Handler) processLegacyTTSPlaybackRequest(sess *session.Session, request session.PlaybackRequest) {
-	playbackCtx, playbackCancel := context.WithCancel(sess.Context())
-	if err := sess.StartCurrent(request, playbackCancel); err != nil {
-		if !errors.Is(err, session.ErrSessionClosed) {
-			slog.Warn("failed to mark current playback request",
-				slog.Any("err", err),
-				slog.Uint64("guild_id", uint64(sess.GuildID())),
-			)
-		}
-		return
-	}
-	defer sess.FinishCurrent()
-
-	result, err := h.synthesizer.Synthesize(request.TempFilePath, time.Now())
-	if removeErr := sess.RemoveTempFile(request.TempFilePath); removeErr != nil {
-		slog.Warn("failed to remove synthesized text file",
-			slog.Any("err", removeErr),
-			slog.Uint64("guild_id", uint64(sess.GuildID())),
-			slog.String("text_file_path", request.TempFilePath),
-		)
-	}
-
-	if playbackCtx.Err() != nil {
-		return
-	}
-
-	if err != nil {
-		logSynthesisError(sess, request, err)
-		return
-	}
-	if result.AudioSource == nil {
-		slog.Error("tts synthesizer returned no audio source",
-			slog.Uint64("guild_id", uint64(sess.GuildID())),
-			slog.Uint64("text_channel_id", uint64(sess.TextChannelID())),
-			slog.Uint64("voice_channel_id", uint64(sess.VoiceChannelID())),
-			slog.String("text_file_path", request.TempFilePath),
-		)
-		return
-	}
-
-	audioSource := result.AudioSource
-
-	defer func() {
-		if cleanupErr := audioSource.Cleanup(); cleanupErr != nil {
-			slog.Warn("failed to clean up generated audio source",
-				slog.Any("err", cleanupErr),
-				slog.Uint64("guild_id", uint64(sess.GuildID())),
-				slog.String("audio_source", audioSource.Description()),
-			)
-		}
-	}()
-
-	slog.Info("generated tts audio from queued message",
-		slog.Uint64("guild_id", uint64(sess.GuildID())),
-		slog.Uint64("text_channel_id", uint64(sess.TextChannelID())),
-		slog.Uint64("voice_channel_id", uint64(sess.VoiceChannelID())),
-		slog.String("audio_source", audioSource.Description()),
-		slog.String("content", request.Content),
-	)
-
-	stream := mustNewWAVStreamFromSource(audioSource)
-	if err := sendPlaybackStream(playbackCtx, sess, stream); err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return
-		}
-		slog.Error("failed to play generated tts audio",
-			slog.Any("err", err),
-			slog.Uint64("guild_id", uint64(sess.GuildID())),
-			slog.Uint64("voice_channel_id", uint64(sess.VoiceChannelID())),
-			slog.String("audio_source", audioSource.Description()),
-		)
-		return
-	}
-
-	slog.Info("completed tts audio playback",
-		slog.Uint64("guild_id", uint64(sess.GuildID())),
-		slog.Uint64("voice_channel_id", uint64(sess.VoiceChannelID())),
-		slog.String("audio_source", audioSource.Description()),
-	)
 }
 
 func sendPlaybackStream(ctx context.Context, sess *session.Session, stream audio.OpusFrameStream) (err error) {
@@ -811,71 +502,4 @@ func (h *Handler) cancelAllPendingVoiceGatewayCloses() {
 
 func formatChannelMention(channelID snowflake.ID) string {
 	return fmt.Sprintf("<#%d>", channelID)
-}
-
-func shouldSkipMessage(event *events.MessageCreate, botUserID snowflake.ID) bool {
-	if event.Message.Type.System() {
-		return true
-	}
-	if event.Message.WebhookID != nil {
-		return true
-	}
-	if event.Message.Author.Bot || event.Message.Author.ID == botUserID {
-		return true
-	}
-	if event.Message.Content == "" {
-		return true
-	}
-	return false
-}
-
-func logSynthesisError(sess *session.Session, request session.PlaybackRequest, err error) {
-	attrs := []any{
-		slog.Any("err", err),
-		slog.Uint64("guild_id", uint64(sess.GuildID())),
-		slog.Uint64("text_channel_id", uint64(sess.TextChannelID())),
-		slog.Uint64("voice_channel_id", uint64(sess.VoiceChannelID())),
-		slog.String("text_file_path", request.TempFilePath),
-	}
-
-	var synthesisErr *tts.SynthesisError
-	if errors.As(err, &synthesisErr) {
-		attrs = append(attrs,
-			slog.String("stderr", synthesisErr.Stderr),
-			slog.String("audio_file_path", synthesisErr.OutputFilePath),
-		)
-	}
-
-	slog.Error("failed to synthesize wav from queued message", attrs...)
-}
-
-func mustNewWAVStreamFromSource(source tts.AudioSource) audio.OpusFrameStream {
-	if source == nil {
-		return &errorStream{err: errors.New("audio source is nil")}
-	}
-
-	reader, err := source.Open()
-	if err != nil {
-		return &errorStream{err: err}
-	}
-	defer reader.Close()
-
-	stream, err := audio.NewWAVStreamFromReader(reader)
-	if err != nil {
-		return &errorStream{err: err}
-	}
-	return stream
-}
-
-type errorStream struct {
-	err error
-}
-
-func (s *errorStream) NextOpusFrame() ([]byte, error) {
-	return nil, s.err
-}
-
-func (s *errorStream) Close() error {
-	return nil
-
 }

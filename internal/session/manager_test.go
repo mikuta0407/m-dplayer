@@ -77,7 +77,7 @@ func TestManagerSupportsMultipleGuildSessionsIndependently(t *testing.T) {
 		t.Fatalf("Create(session2) error = %v", err)
 	}
 
-	if err := session1.Enqueue(PlaybackRequest{Content: "guild-1"}); err != nil {
+	if err := session1.Enqueue(PlaybackRequest{Title: "guild-1"}); err != nil {
 		t.Fatalf("session1.Enqueue() error = %v", err)
 	}
 	if session1.QueueLen() != 1 {
@@ -206,7 +206,7 @@ func TestManagerDestroyClosesAndRemovesSession(t *testing.T) {
 	if conn.closeCalls != 1 {
 		t.Fatalf("closeCalls = %d, want 1", conn.closeCalls)
 	}
-	if err := session.Enqueue(PlaybackRequest{Content: "hello"}); err != ErrSessionClosed {
+	if err := session.Enqueue(PlaybackRequest{Title: "hello"}); err != ErrSessionClosed {
 		t.Fatalf("Enqueue() error = %v, want %v", err, ErrSessionClosed)
 	}
 	select {

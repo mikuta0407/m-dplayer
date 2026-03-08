@@ -32,7 +32,6 @@ type QueueSourceType string
 const (
 	QueueSourceTypeDirect QueueSourceType = "direct"
 	QueueSourceTypeYTDLP  QueueSourceType = "yt-dlp"
-	QueueSourceTypeTTS    QueueSourceType = "tts"
 )
 
 type RequestUser struct {
@@ -48,10 +47,6 @@ type QueueItem struct {
 	TextChannelID snowflake.ID
 	TempFilePath  string
 	Source        music.InputSource
-
-	// Content is kept temporarily so the existing TTS pipeline can continue to
-	// log normalized text while the migration to music playback is in progress.
-	Content string
 }
 
 type PlaybackRequest = QueueItem

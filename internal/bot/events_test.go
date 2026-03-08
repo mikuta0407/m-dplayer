@@ -161,48 +161,6 @@ func TestOnVoiceServerUpdateExtendsRecoveryDeadline(t *testing.T) {
 	}
 }
 
-func TestProcessTTSDisconnectDestroysSessionAndReturnsSuccessMessage(t *testing.T) {
-	handler := &Handler{sessions: session.NewManager()}
-	conn := &stubVoiceConn{udpConn: &stubVoiceUDPConn{}}
-
-	if _, err := handler.sessions.Create(session.CreateParams{
-		GuildID:        1,
-		TextChannelID:  10,
-		VoiceChannelID: 20,
-		Conn:           conn,
-	}); err != nil {
-		t.Fatalf("Create() error = %v", err)
-	}
-
-	var got string
-	handler.processTTSDisconnect(1, 10, 100, func(content string) {
-		got = content
-	})
-
-	if got != "読み上げセッションを切断しました。" {
-		t.Fatalf("final response = %q, want %q", got, "読み上げセッションを切断しました。")
-	}
-	if handler.sessions.Exists(1) {
-		t.Fatal("session should be removed after disconnect")
-	}
-	if conn.closeCalls != 1 {
-		t.Fatalf("closeCalls = %d, want 1", conn.closeCalls)
-	}
-}
-
-func TestProcessTTSDisconnectReturnsAlreadyClosedMessageWhenSessionMissing(t *testing.T) {
-	handler := &Handler{sessions: session.NewManager()}
-
-	var got string
-	handler.processTTSDisconnect(1, 10, 100, func(content string) {
-		got = content
-	})
-
-	if got != "読み上げセッションは既に切断されています。" {
-		t.Fatalf("final response = %q, want %q", got, "読み上げセッションは既に切断されています。")
-	}
-}
-
 func newTestHandlerWithSession(t *testing.T, guildID snowflake.ID) *Handler {
 	t.Helper()
 
