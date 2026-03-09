@@ -535,13 +535,41 @@ func logMusicPlaybackError(sess *session.Session, request session.PlaybackReques
 }
 
 func interactionActorDisplayName(event *events.ApplicationCommandInteractionCreate) string {
-	if member := event.Member(); member != nil {
-		if name := strings.TrimSpace(member.EffectiveName()); name != "" {
-			return name
+	if event == nil {
+		return "Unknown User"
+	}
+
+	user := event.User()
+	displayName := strings.TrimSpace(user.EffectiveName())
+
+	if guildID := event.GuildID(); guildID != nil {
+		if client := event.Client(); client != nil {
+			if client.Caches != nil {
+				if member, ok := client.Caches.Member(*guildID, user.ID); ok {
+					if name := strings.TrimSpace(member.EffectiveName()); name != "" {
+						return name
+					}
+				} else if member, err := client.Rest.GetMember(*guildID, user.ID); err == nil {
+					if name := strings.TrimSpace(member.EffectiveName()); name != "" {
+						return name
+					}
+				}
+			} else if member, err := client.Rest.GetMember(*guildID, user.ID); err == nil {
+				if name := strings.TrimSpace(member.EffectiveName()); name != "" {
+					return name
+				}
+			}
+		}
+
+		if member := event.Member(); member != nil {
+			if name := strings.TrimSpace(member.EffectiveName()); name != "" {
+				return name
+			}
 		}
 	}
-	if name := strings.TrimSpace(event.User().EffectiveName()); name != "" {
-		return name
+
+	if displayName != "" {
+		return displayName
 	}
 	return "Unknown User"
 }
