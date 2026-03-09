@@ -215,10 +215,9 @@ func (h *Handler) processDStopLike(client *disgobot.Client, guildID snowflake.ID
 	}
 
 	verb := "停止"
-	channelMessage := fmt.Sprintf("Stopped: %s by %s", formatTrackLink(current), actorDisplayName)
+	channelMessage := formatStopLikeChannelMessage(current, actorDisplayName, commandName)
 	if commandName == dnextCommandName {
 		verb = "スキップ"
-		channelMessage = fmt.Sprintf("Skipped: %s by %s", formatTrackLink(current), actorDisplayName)
 	}
 	if err := postTextChannelMessage(client, textChannelID, channelMessage); err != nil {
 		slog.Warn("failed to post stop/next update message",
@@ -594,14 +593,30 @@ func (h *Handler) postQueuedMessage(client *disgobot.Client, channelID snowflake
 }
 
 func formatQueueLine(item session.QueueItem) string {
-	line := formatTrackLink(item)
+	line := formatTrackLinkNoPreview(item)
 	if item.RequestedBy.DisplayName != "" {
 		line += " from " + item.RequestedBy.DisplayName
 	}
 	return line
 }
 
+func formatStopLikeChannelMessage(item session.QueueItem, actorDisplayName string, commandName string) string {
+	action := "Stopped"
+	if commandName == dnextCommandName {
+		action = "Skipped"
+	}
+	return fmt.Sprintf("%s: %s by %s", action, formatTrackLinkNoPreview(item), actorDisplayName)
+}
+
 func formatTrackLink(item session.QueueItem) string {
+	return formatTrackLinkWithURL(item, false)
+}
+
+func formatTrackLinkNoPreview(item session.QueueItem) string {
+	return formatTrackLinkWithURL(item, true)
+}
+
+func formatTrackLinkWithURL(item session.QueueItem, suppressPreview bool) string {
 	title := strings.TrimSpace(item.Title)
 	if title == "" {
 		title = strings.TrimSpace(item.URL)
@@ -609,10 +624,14 @@ func formatTrackLink(item session.QueueItem) string {
 	if title == "" {
 		title = "unknown"
 	}
-	if strings.TrimSpace(item.URL) == "" {
+	url := strings.TrimSpace(item.URL)
+	if url == "" {
 		return escapeMarkdownText(title)
 	}
-	return fmt.Sprintf("[%s](%s)", escapeMarkdownText(title), item.URL)
+	if suppressPreview {
+		return fmt.Sprintf("[%s](<%s>)", escapeMarkdownText(title), url)
+	}
+	return fmt.Sprintf("[%s](%s)", escapeMarkdownText(title), url)
 }
 
 func escapeMarkdownText(text string) string {

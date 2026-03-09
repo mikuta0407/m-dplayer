@@ -42,13 +42,51 @@ func TestQueueSnapshotMessageIncludesCurrentAndQueuedTracks(t *testing.T) {
 	for _, want := range []string{
 		"音量: 7",
 		"再生中:",
-		"[Current Song](https://example.com/current) from Alice",
+		"[Current Song](<https://example.com/current>) from Alice",
 		"待機キュー:",
-		"1. [Next Song](https://example.com/next) from Bob",
+		"1. [Next Song](<https://example.com/next>) from Bob",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("queueSnapshotMessage() = %q, want substring %q", got, want)
 		}
+	}
+}
+
+func TestFormatTrackLinkUsesPreviewForChannelPost(t *testing.T) {
+	item := session.QueueItem{
+		Title: "Current Song",
+		URL:   "https://example.com/current",
+	}
+
+	got := formatTrackLink(item)
+	want := "[Current Song](https://example.com/current)"
+	if got != want {
+		t.Fatalf("formatTrackLink() = %q, want %q", got, want)
+	}
+
+	gotNoPreview := formatTrackLinkNoPreview(item)
+	wantNoPreview := "[Current Song](<https://example.com/current>)"
+	if gotNoPreview != wantNoPreview {
+		t.Fatalf("formatTrackLinkNoPreview() = %q, want %q", gotNoPreview, wantNoPreview)
+	}
+}
+
+func TestFormatStopLikeChannelMessageSuppressesPreview(t *testing.T) {
+	item := session.QueueItem{
+		Title: "Current Song",
+		URL:   "https://example.com/current",
+	}
+
+	gotStopped := formatStopLikeChannelMessage(item, "Bob", dstopCommandName)
+	wantStopped := "Stopped: [Current Song](<https://example.com/current>) by Bob"
+	if gotStopped != wantStopped {
+		t.Fatalf("formatStopLikeChannelMessage(stop) = %q, want %q", gotStopped, wantStopped)
+	}
+
+	gotSkipped := formatStopLikeChannelMessage(item, "Bob", dnextCommandName)
+	wantSkipped := "Skipped: [Current Song](<https://example.com/current>) by Bob"
+	if gotSkipped != wantSkipped {
+		t.Fatalf("formatStopLikeChannelMessage(skip) = %q, want %q", gotSkipped, wantSkipped)
 	}
 }
 
